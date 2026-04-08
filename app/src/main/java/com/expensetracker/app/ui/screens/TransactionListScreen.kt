@@ -2,6 +2,7 @@ package com.expensetracker.app.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +21,8 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
 import com.expensetracker.app.BuildConfig
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -75,7 +78,9 @@ import java.util.Locale
 fun TransactionListScreen(
     viewModel: TransactionViewModel,
     onOpenReview: () -> Unit,
-    onOpenAnalysis: () -> Unit = {}
+    onOpenAnalysis: () -> Unit = {},
+    onBackupClick: () -> Unit = {},
+    onRestoreClick: () -> Unit = {}
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val totalSpent by viewModel.totalSpent.collectAsState()
@@ -88,6 +93,8 @@ fun TransactionListScreen(
     val selectedMonth by viewModel.selectedMonth.collectAsState()
     var showTestDialog by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
+    var showRestoreConfirm by remember { mutableStateOf(false) }
 
     if (showAddDialog) {
         AddTransactionDialog(
@@ -127,6 +134,25 @@ fun TransactionListScreen(
         )
     }
 
+    if (showRestoreConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirm = false },
+            title = { Text("Restore Data?") },
+            text = {
+                Text("This will replace all current data with the backup. The app will restart.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRestoreConfirm = false
+                    onRestoreClick()
+                }) { Text("Restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
@@ -162,6 +188,30 @@ fun TransactionListScreen(
                         }
                         IconButton(onClick = { viewModel.syncSmsTransactions() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Sync SMS")
+                        }
+                        Box {
+                            IconButton(onClick = { showOverflowMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More")
+                            }
+                            DropdownMenu(
+                                expanded = showOverflowMenu,
+                                onDismissRequest = { showOverflowMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Backup Data") },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        onBackupClick()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Restore Data") },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        showRestoreConfirm = true
+                                    }
+                                )
+                            }
                         }
                     }
                 }

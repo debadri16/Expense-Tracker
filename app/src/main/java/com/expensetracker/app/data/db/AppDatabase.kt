@@ -14,6 +14,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
 
     companion object {
+        const val DB_NAME = "expense_tracker.db"
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -22,10 +24,17 @@ abstract class AppDatabase : RoomDatabase() {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "expense_tracker.db"
+                    DB_NAME
                 )
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build().also { INSTANCE = it }
+            }
+        }
+
+        fun closeAndClear() {
+            synchronized(this) {
+                INSTANCE?.close()
+                INSTANCE = null
             }
         }
     }

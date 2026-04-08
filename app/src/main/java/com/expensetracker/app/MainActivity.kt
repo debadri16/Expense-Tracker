@@ -10,6 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.expensetracker.app.notification.TransactionNotificationHelper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +50,26 @@ class MainActivity : ComponentActivity() {
         hasPermission = results.values.all { it }
     }
 
+    private val backupLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri != null) viewModel.backupDatabase(uri)
+    }
+
+    private val restoreLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) viewModel.restoreDatabase(uri) { restartApp() }
+    }
+
+    private fun restartApp() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        startActivity(intent)
+        finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -70,7 +93,16 @@ class MainActivity : ComponentActivity() {
                         TransactionListScreen(
                             viewModel,
                             onOpenReview = { showReview = true },
-                            onOpenAnalysis = { showAnalysis = true }
+                            onOpenAnalysis = { showAnalysis = true },
+                            onBackupClick = {
+                                val timestamp = SimpleDateFormat(
+                                    "yyyyMMdd_HHmmss", Locale.getDefault()
+                                ).format(Date())
+                                backupLauncher.launch("expense_tracker_$timestamp.db")
+                            },
+                            onRestoreClick = {
+                                restoreLauncher.launch(arrayOf("*/*"))
+                            }
                         )
                     }
                 }

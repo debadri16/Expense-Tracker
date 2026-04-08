@@ -12,6 +12,8 @@ import com.expensetracker.app.data.sms.RawSms
 import com.expensetracker.app.data.sms.SmsParser
 import com.expensetracker.app.data.sms.SmsReader
 import com.expensetracker.app.notification.TransactionNotificationHelper
+import android.net.Uri
+import androidx.sqlite.db.SimpleSQLiteQuery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +23,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Calendar
 
 class TransactionViewModel(app: Application) : AndroidViewModel(app) {
@@ -208,6 +212,62 @@ class TransactionViewModel(app: Application) : AndroidViewModel(app) {
                 _syncStatus.value = "Error: ${e.message}"
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    // --- Backup & Restore ---
+
+    fun backupDatabase(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _syncStatus.value = "Backing up..."
+                val context = getApplication<Application>()
+
+                db.query(SimpleSQLiteQuery("PRAGMA wal_checkpoint(FULL)")).close()
+
+                val dbFile = context.getDatabasePath(AppDatabase.DB_NAME)
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    dbFile.inputStream().use { input -> input.copyTo(output) }
+                } ?: throw Exception("Could not open output file")
+
+                _syncStatus.value = "Backup saved successfully"
+            } catch (e: Exception) {
+                _syncStatus.value = "Backup failed: ${e.message}"
+            }
+        }
+    }
+
+    fun restoreDatabase(uri: Uri, onRestart: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _syncStatus.value = "Restoring..."
+                val context = getApplication<Application>()
+
+                val headerValid = context.contentResolver.openInputStream(uri)?.use { input ->
+                    val header = ByteArray(16)
+                    input.read(header) >= 16 &&
+                        String(header, Charsets.ISO_8859_1).startsWith("SQLite format 3")
+                } ?: false
+
+                if (!headerValid) {
+                    _syncStatus.value = "Invalid backup file"
+                    return@launch
+                }
+
+                AppDatabase.closeAndClear()
+
+                val dbFile = context.getDatabasePath(AppDatabase.DB_NAME)
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    dbFile.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw Exception("Could not open backup file")
+
+                File(dbFile.path + "-wal").delete()
+                File(dbFile.path + "-shm").delete()
+
+                withContext(Dispatchers.Main) { onRestart() }
+            } catch (e: Exception) {
+                _syncStatus.value = "Restore failed: ${e.message}"
             }
         }
     }
